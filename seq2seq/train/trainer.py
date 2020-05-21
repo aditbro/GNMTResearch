@@ -21,11 +21,13 @@
 
 import logging
 import os
+import pyprof
 import time
 from itertools import cycle
 
 import numpy as np
 import torch
+import torch.cuda.profiler as profiler
 import torch.optim
 import torch.utils.data
 from apex.parallel import DistributedDataParallel
@@ -159,6 +161,7 @@ class Seq2SeqTrainer:
         :param update: if True: optimizer does update of the weights
         :param training: if True: executes optimizer
         """
+        pyprof.init()
         src, src_length = src
         tgt, tgt_length = tgt
         src = src.to(self.device)
@@ -168,6 +171,8 @@ class Seq2SeqTrainer:
         num_toks = {}
         num_toks['tgt'] = int(sum(tgt_length - 1))
         num_toks['src'] = int(sum(src_length))
+
+        profiler.start()
 
         if self.batch_first:
             output = self.model(src, src_length, tgt[:, :-1])
@@ -190,6 +195,11 @@ class Seq2SeqTrainer:
 
         loss_per_token = loss_per_batch / num_toks['tgt']
         loss_per_sentence = loss_per_batch / B
+
+        profiler.stop()
+
+        print('You can stop now')
+        time.sleep(5)
 
         return loss_per_token, loss_per_sentence, num_toks
 
