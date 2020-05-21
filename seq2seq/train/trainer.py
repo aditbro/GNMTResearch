@@ -21,7 +21,7 @@
 
 import logging
 import os
-import pyprof
+import pyprof2
 import time
 from itertools import cycle
 
@@ -161,7 +161,7 @@ class Seq2SeqTrainer:
         :param update: if True: optimizer does update of the weights
         :param training: if True: executes optimizer
         """
-        pyprof.init()
+        pyprof2.init()
         src, src_length = src
         tgt, tgt_length = tgt
         src = src.to(self.device)
