@@ -551,6 +551,7 @@ def main():
     test_bleu = None
     with torch.autograd.profiler.emit_nvtx():
         for epoch in range(args.start_epoch, args.epochs):
+            profiler.start()
             logging.info(f'Starting epoch {epoch}')
 
             train_loader.sampler.set_epoch(epoch)
@@ -604,6 +605,8 @@ def main():
             logging.info(f'Finished epoch {epoch}')
             if break_training:
                 break
+
+            profiler.stop()
 
     utils.barrier()
     training_stop = time.time()
