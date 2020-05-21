@@ -172,31 +172,32 @@ class Seq2SeqTrainer:
         num_toks['tgt'] = int(sum(tgt_length - 1))
         num_toks['src'] = int(sum(src_length))
 
-        profiler.start()
+        with torch.autograd.profiler.emit_nvtx():
+            profiler.start()
 
-        if self.batch_first:
-            output = self.model(src, src_length, tgt[:, :-1])
-            tgt_labels = tgt[:, 1:]
-            T, B = output.size(1), output.size(0)
-        else:
-            output = self.model(src, src_length, tgt[:-1])
-            tgt_labels = tgt[1:]
-            T, B = output.size(0), output.size(1)
+            if self.batch_first:
+                output = self.model(src, src_length, tgt[:, :-1])
+                tgt_labels = tgt[:, 1:]
+                T, B = output.size(1), output.size(0)
+            else:
+                output = self.model(src, src_length, tgt[:-1])
+                tgt_labels = tgt[1:]
+                T, B = output.size(0), output.size(1)
 
-        loss = self.criterion(output.view(T * B, -1),
-                              tgt_labels.contiguous().view(-1))
+            loss = self.criterion(output.view(T * B, -1),
+                                tgt_labels.contiguous().view(-1))
 
-        loss_per_batch = loss.item()
-        loss /= (B * self.iter_size)
+            loss_per_batch = loss.item()
+            loss /= (B * self.iter_size)
 
-        if training:
-            self.fp_optimizer.step(loss, self.optimizer, self.scheduler,
-                                   update)
+            if training:
+                self.fp_optimizer.step(loss, self.optimizer, self.scheduler,
+                                    update)
 
-        loss_per_token = loss_per_batch / num_toks['tgt']
-        loss_per_sentence = loss_per_batch / B
+            loss_per_token = loss_per_batch / num_toks['tgt']
+            loss_per_sentence = loss_per_batch / B
 
-        profiler.stop()
+            profiler.stop()
 
         print('You can stop now')
         time.sleep(5)
