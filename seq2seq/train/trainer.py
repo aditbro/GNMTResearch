@@ -200,7 +200,7 @@ class Seq2SeqTrainer:
             profiler.stop()
 
         print('You can stop now')
-        time.sleep(5)
+        exit()
 
         return loss_per_token, loss_per_sentence, num_toks
 
