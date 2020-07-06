@@ -1,0 +1,1 @@
+srun --gres=gpu:1 nsys python3 train.py --dataset-dir /raid/adit/data/wmt16_de_en/
