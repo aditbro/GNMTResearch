@@ -1,1 +1,1 @@
-srun --gres=gpu:1 nsys python3 train.py --dataset-dir /raid/adit/data/wmt16_de_en/
+srun --gres=gpu:1 nsys profile -f true -o net -c cudaProfilerApi --stop-on-range-end true --export sqlite python3 train.py --dataset-dir /raid/adit/data/wmt16_de_en/
