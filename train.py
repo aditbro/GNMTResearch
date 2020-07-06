@@ -367,7 +367,6 @@ def main():
     """
     Launches data-parallel multi-gpu training.
     """
-    pyprof.init()
     training_start = time.time()
     args = parse_args()
     device = utils.set_device(args.cuda, args.local_rank)
