@@ -24,7 +24,8 @@
 import argparse
 import logging
 import os
-import pyprof
+import pyprof2
+pyprof2.init()
 import sys
 import time
 from ast import literal_eval
@@ -550,6 +551,7 @@ def main():
     break_training = False
     test_bleu = None
     with torch.autograd.profiler.emit_nvtx():
+        profiler.start()
         for epoch in range(args.start_epoch, args.epochs):
             logging.info(f'Starting epoch {epoch}')
 
@@ -604,6 +606,7 @@ def main():
             logging.info(f'Finished epoch {epoch}')
             if break_training:
                 break
+        profiler.stop()
 
     utils.barrier()
     training_stop = time.time()

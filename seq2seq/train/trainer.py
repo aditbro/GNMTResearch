@@ -38,7 +38,6 @@ from seq2seq.train.lr_scheduler import WarmupMultiStepLR
 from seq2seq.utils import AverageMeter
 from seq2seq.utils import sync_workers
 
-
 class Seq2SeqTrainer:
     """
     Seq2SeqTrainer
