@@ -24,6 +24,7 @@ import os
 import time
 from itertools import cycle
 
+import torch.cuda.profiler as profiler
 import numpy as np
 import torch
 import torch.optim
@@ -219,82 +220,89 @@ class Seq2SeqTrainer:
         batch_size = data_loader.batch_size
 
         end = time.time()
-        for i, (src, tgt) in enumerate(data_loader):
-            self.save_counter += 1
-            # measure data loading time
-            data_time.update(time.time() - end)
+        with torch.autograd.profiler.emit_nvtx():
+            for i, (src, tgt) in enumerate(data_loader):
+                self.save_counter += 1
+                # measure data loading time
+                data_time.update(time.time() - end)
 
-            update = False
-            if i % self.iter_size == self.iter_size - 1:
-                update = True
+                update = False
+                if i % self.iter_size == self.iter_size - 1:
+                    update = True
+                    profiler.start()
 
-            # do a train/evaluate iteration
-            stats = self.iterate(src, tgt, update, training=training)
-            loss_per_token, loss_per_sentence, num_toks = stats
+                # do a train/evaluate iteration
+                stats = self.iterate(src, tgt, update, training=training)
+                
+                if update:
+                    profiler.stop()
+                    exit()
 
-            # measure accuracy and record loss
-            losses_per_token.update(loss_per_token, num_toks['tgt'])
-            losses_per_sentence.update(loss_per_sentence, batch_size)
+                loss_per_token, loss_per_sentence, num_toks = stats
 
-            # measure elapsed time
-            elapsed = time.time() - end
-            batch_time.update(elapsed)
-            src_tok_time.update(num_toks['src'] / elapsed)
-            tgt_tok_time.update(num_toks['tgt'] / elapsed)
-            tot_num_toks = num_toks['tgt'] + num_toks['src']
-            tot_tok_time.update(tot_num_toks / elapsed)
-            self.loss = losses_per_token.avg
+                # measure accuracy and record loss
+                losses_per_token.update(loss_per_token, num_toks['tgt'])
+                losses_per_sentence.update(loss_per_sentence, batch_size)
 
-            if training and i in eval_iters:
-                eval_fname = f'eval_epoch_{self.epoch}_iter_{i}'
-                eval_path = os.path.join(self.save_dir, eval_fname)
-                _, eval_stats = self.translator.run(
-                    calc_bleu=True,
-                    epoch=self.epoch,
-                    iteration=i,
-                    eval_path=eval_path,
-                    )
-                test_bleu = eval_stats['bleu']
+                # measure elapsed time
+                elapsed = time.time() - end
+                batch_time.update(elapsed)
+                src_tok_time.update(num_toks['src'] / elapsed)
+                tgt_tok_time.update(num_toks['tgt'] / elapsed)
+                tot_num_toks = num_toks['tgt'] + num_toks['src']
+                tot_tok_time.update(tot_num_toks / elapsed)
+                self.loss = losses_per_token.avg
 
-                log = []
-                log += [f'TRAIN [{self.epoch}][{i}/{len(data_loader)}]']
-                log += [f'BLEU: {test_bleu:.2f}']
-                log = '\t'.join(log)
-                logging.info(log)
+                if training and i in eval_iters:
+                    eval_fname = f'eval_epoch_{self.epoch}_iter_{i}'
+                    eval_path = os.path.join(self.save_dir, eval_fname)
+                    _, eval_stats = self.translator.run(
+                        calc_bleu=True,
+                        epoch=self.epoch,
+                        iteration=i,
+                        eval_path=eval_path,
+                        )
+                    test_bleu = eval_stats['bleu']
 
-                self.model.train()
-                self.preallocate(data_loader.batch_size,
-                                 data_loader.dataset.max_len, training=True)
+                    log = []
+                    log += [f'TRAIN [{self.epoch}][{i}/{len(data_loader)}]']
+                    log += [f'BLEU: {test_bleu:.2f}']
+                    log = '\t'.join(log)
+                    logging.info(log)
 
-            if i % self.print_freq == 0:
-                phase = 'TRAIN' if training else 'VALIDATION'
-                log = []
-                log += [f'{phase} [{self.epoch}][{i}/{len(data_loader)}]']
-                log += [f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})']
-                log += [f'Data {data_time.val:.2e} ({data_time.avg:.2e})']
-                log += [f'Tok/s {tot_tok_time.val:.0f} ({tot_tok_time.avg:.0f})']
-                if self.verbose:
-                    log += [f'Src tok/s {src_tok_time.val:.0f} ({src_tok_time.avg:.0f})']
-                    log += [f'Tgt tok/s {tgt_tok_time.val:.0f} ({tgt_tok_time.avg:.0f})']
-                    log += [f'Loss/sentence {losses_per_sentence.val:.1f} ({losses_per_sentence.avg:.1f})']
-                log += [f'Loss/tok {losses_per_token.val:.4f} ({losses_per_token.avg:.4f})']
-                if training:
-                    lr = self.optimizer.param_groups[0]['lr']
-                    log += [f'LR {lr:.3e}']
-                log = '\t'.join(log)
-                logging.info(log)
+                    self.model.train()
+                    self.preallocate(data_loader.batch_size,
+                                    data_loader.dataset.max_len, training=True)
 
-            save_chkpt = (self.save_counter % self.save_freq) == (self.save_freq - 1)
-            if training and save_chkpt:
-                self.save_counter = 0
-                self.save_info['iteration'] = i
-                identifier = next(self.checkpoint_counter, -1)
-                if identifier != -1:
-                    with sync_workers() as rank:
-                        if rank == 0:
-                            self.save(identifier=identifier)
+                if i % self.print_freq == 0:
+                    phase = 'TRAIN' if training else 'VALIDATION'
+                    log = []
+                    log += [f'{phase} [{self.epoch}][{i}/{len(data_loader)}]']
+                    log += [f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})']
+                    log += [f'Data {data_time.val:.2e} ({data_time.avg:.2e})']
+                    log += [f'Tok/s {tot_tok_time.val:.0f} ({tot_tok_time.avg:.0f})']
+                    if self.verbose:
+                        log += [f'Src tok/s {src_tok_time.val:.0f} ({src_tok_time.avg:.0f})']
+                        log += [f'Tgt tok/s {tgt_tok_time.val:.0f} ({tgt_tok_time.avg:.0f})']
+                        log += [f'Loss/sentence {losses_per_sentence.val:.1f} ({losses_per_sentence.avg:.1f})']
+                    log += [f'Loss/tok {losses_per_token.val:.4f} ({losses_per_token.avg:.4f})']
+                    if training:
+                        lr = self.optimizer.param_groups[0]['lr']
+                        log += [f'LR {lr:.3e}']
+                    log = '\t'.join(log)
+                    logging.info(log)
 
-            end = time.time()
+                save_chkpt = (self.save_counter % self.save_freq) == (self.save_freq - 1)
+                if training and save_chkpt:
+                    self.save_counter = 0
+                    self.save_info['iteration'] = i
+                    identifier = next(self.checkpoint_counter, -1)
+                    if identifier != -1:
+                        with sync_workers() as rank:
+                            if rank == 0:
+                                self.save(identifier=identifier)
+
+                end = time.time()
 
         tot_tok_time.reduce('sum')
         losses_per_token.reduce('mean')
