@@ -99,6 +99,7 @@ class ResidualRecurrentEncoder(nn.Module):
         x = self.dropout(x)
         x = pack_padded_sequence(x, lengths.cpu().numpy(),
                                  batch_first=self.batch_first)
+        import pdb; pdb.set_trace()
         x, _ = self.rnn_layers[0](x)
         x, _ = pad_packed_sequence(x, batch_first=self.batch_first)
 
